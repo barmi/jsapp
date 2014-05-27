@@ -6,6 +6,7 @@
 #include "jsapp.h"
 #include "jsappDlg.h"
 #include "afxdialogex.h"
+#include "SimpleFtp.h"
 
 #include <Vfw.h>
 
@@ -238,6 +239,20 @@ bool CjsappDlg::SaveImageCapture(void)
 		return false;
 	}
 
+	CSimpleFtp ftp_up;
+	TCHAR ftp_dir[MAX_PATH];
+
+	bool bFtp = false;
+	if (ftp_up.Login(_T("in.dvr.name"), _T("barmi"), _T("qkfmal63"), 21, NULL, FALSE))
+	{
+		CString remote_dir;
+		ftp_up.GetRemoteDirectory(remote_dir);
+		_stprintf_s(ftp_dir, MAX_PATH, _T("%s/jsapp"), remote_dir);
+		ftp_up.CreateRemoteDir2(ftp_dir);
+
+		bFtp = true;
+	}
+
 	//
 	// Send JPEG Memory
 	//SendPacket(PACKETTYPE_JPEG_RESPONSE, pBuff, (DWORD)ulnSize.QuadPart);
@@ -268,6 +283,22 @@ bool CjsappDlg::SaveImageCapture(void)
 		, newtime.tm_mday);
 	_tmkdir(dir);
 
+	if (bFtp)
+	{
+		TCHAR username[MAX_PATH];
+		DWORD username_size = MAX_PATH;
+		GetUserName(username, &username_size);
+		_stprintf_s(ftp_dir + _tcsclen(ftp_dir), MAX_PATH-_tcsclen(ftp_dir), _T("/%s")
+			, username);
+		ftp_up.CreateRemoteDir2(ftp_dir);
+
+		_stprintf_s(ftp_dir + _tcsclen(ftp_dir), MAX_PATH-_tcsclen(ftp_dir), _T("/%.4d%.2d%.2d")
+			, newtime.tm_year+1900
+			, newtime.tm_mon+1
+			, newtime.tm_mday);
+		ftp_up.CreateRemoteDir2(ftp_dir);
+	}
+
 	_stprintf_s(dir + _tcsclen(dir), MAX_PATH-_tcsclen(dir), _T("%.2d%.2d%.2d.jpg")
 		, newtime.tm_hour
 		, newtime.tm_min
@@ -280,6 +311,15 @@ bool CjsappDlg::SaveImageCapture(void)
 	{
 		fwrite((const void*)(pBuff), (DWORD)ulnSize.QuadPart, 1, fp);
 		fclose(fp);
+
+		if (bFtp)
+		{
+			_stprintf_s(ftp_dir + _tcsclen(ftp_dir), MAX_PATH-_tcsclen(ftp_dir), _T("/%.2d%.2d%.2d.jpg")
+				, newtime.tm_hour
+				, newtime.tm_min
+				, newtime.tm_sec);
+			ftp_up.UploadFile(dir, ftp_dir);
+		}
 	}
 
 	TRACE("-------------ulnSize = %ld, pBuff = %p\n", ulnSize.QuadPart, pBuff);
@@ -350,7 +390,12 @@ bool CjsappDlg::SaveImageCapture(void)
 	_stprintf_s(dir + _tcsclen(dir) - 4, MAX_PATH-_tcsclen(dir), _T("_cam.jpg"));
 	capFileSaveDIB(hWndCap, dir);
 
-
+	if (bFtp)
+	{
+		_stprintf_s(ftp_dir + _tcsclen(ftp_dir) - 4, MAX_PATH-_tcsclen(ftp_dir), _T("_cam.jpg"));
+		ftp_up.UploadFile(dir, ftp_dir);
+		ftp_up.LogOut();
+	}
 
 
 #if 0
